@@ -24,29 +24,28 @@ def load_data(filename: str) -> (pd.DataFrame, pd.Series):
     Design matrix and response vector (prices) - either as a single
     DataFrame or a Tuple[DataFrame, Series]
     """
-    x = pd.DataFrame(pd.read_csv(filename, usecols=np.arange(2,17)))
-
+    x = pd.DataFrame(pd.read_csv(filename, usecols=np.arange(2,17))
+                     .drop_duplicates())
     x = x.where(x>=0, other=pd.NaT).dropna()
-    x = pd.get_dummies(x,columns=['zipcode'])
-
-    #x['yr_built'] = 2022-x['yr_built']
+    x = x[x['zipcode'] > 0]
+    x = pd.get_dummies(x, columns=['zipcode'])
     x.loc[x['yr_renovated'] > 0, 'yr_since_renovated'] = x['yr_renovated']
     x.loc[x['yr_renovated'] <= 0, 'yr_since_renovated'] = x['yr_built']
-    x = x.where(x['yr_since_renovated']>0, other=pd.NaT).dropna()
-    #x = x.where(x[['yr_renovated','bedrooms','bathrooms','sqrf_living','sqft_lot']]>0, other=pd.NaT).dropna()
-
-
-    #pd.DataFrame(x[['yr_since_renovated',"yr_renovated"]]).to_csv("./temp_labels.csv")
-
     del x['yr_built']
     del x['yr_renovated']
+    x = x[x['yr_since_renovated'] > 0]
+    x = x[x['sqft_living'] > 0]
+    x = x[x['sqft_lot'] > 0]
     x = x.astype(float)
-    y= x['price']
+
+    x.to_csv(r"C:\Users\romyb\Documents\iml\IML.HUJI\exercises\temp_labels.csv")
+    y = x['price']
     del x['price']
     return x,y
 
 
-def feature_evaluation(X: pd.DataFrame, y: pd.Series, output_path: str = ".") -> NoReturn:
+def feature_evaluation(X: pd.DataFrame, y: pd.Series, output_path: str = ".") \
+        -> NoReturn:
     """
     Create scatter plot between each feature and the response.
         - Plot title specifies feature name
@@ -63,34 +62,72 @@ def feature_evaluation(X: pd.DataFrame, y: pd.Series, output_path: str = ".") ->
     output_path: str (default ".")
         Path to folder in which plots are saved
     """
-    # todo: insert y to x
     X.insert(0,'price', y)
     cov_XY = X.cov()['price']
     std_y = y.std()
     X.sort_values(by=['price'])
-    #todo: change to readable before hagash
-    # for col in X.columns:
-    #     corr = float(cov_XY[col]/(std_y*(X[col].std())))
 
+    for col in X.columns:
+        corr = float(cov_XY[col]/(std_y*(X[col].std())))
+        print(col)
+        print(corr)
         # figi = go.Figure([go.Scatter(x=X['price'], y= X[col], mode='markers')],
         #           layout=go.Layout(title=f"feature is: {col} and the pearson "
         #                                  f"correlation between is: {corr}"
         #                            , xaxis_title = "price"
         #                            , yaxis_title = f"number of {col}", width= 1000))
         # pio.write_image(figi, output_path+'/'+ col + '.png')
-
-    # corr = float(cov_XY['yr_since_renovated']/(std_y*(X['yr_since_renovated'].std())))
-    #
-    # figi = go.Figure([go.Scatter(x=X['price'], y= X[col], mode='markers')],
-    #           layout=go.Layout(title=f"feature is: {col} and the pearson "
-    #                                  f"correlation between is: {corr}"
-    #                            , xaxis_title = "price"
-    #                            , yaxis_title = f"number of {col}", width= 1000)).show()
-    # pio.write_image(figi, output_path+'/'+ col + '.png')
-
     del X['price']
 
+
+def fit_test_model(x_train: pd.DataFrame, y_train: pd.Series, x_test, y_test):
+    # For every percentage p in 10%, ..., 100%, repeat the following 10 times:
+    #   1) Sample p% of the overall training data
+    #   2) Fit linear model (including intercept) over sampled set
+    #   3) Test fitted model over test set
+    #   4) Store average and variance of loss over test set
+    # Then plot average loss as function of training size with error ribbon of
+
+    sample_num = 10
+    lini_model = LinearRegression(True)
+    mean_loss, std_loss = np.zeros(91), np.zeros(91)
+    x_test, y_test = np.array(x_test), np.array(y_test)
+    a = np.arange(10,100,1)
+    for p in a:
+        cur_loss = np.zeros(sample_num)
+        for j in range(sample_num):
+            cur_x = x_train.sample(frac=p/100)
+            cur_y = y_train.loc[cur_x.index]
+            cur_x, cur_y = np.array(cur_x), np.array(cur_y)
+            lini_model.fit(cur_x, cur_y)
+            cur_loss[j] = lini_model.loss(x_test, y_test)
+
+        mean_loss[p-10] = np.mean(cur_loss)
+        std_loss[p-10] = np.std(cur_loss)
+
+    up_func = mean_loss + (2 * std_loss)
+    down_func = mean_loss - (2 * std_loss)
+    a = a/100
+    fig = go.Figure(
+        (go.Scatter(x=a, y=mean_loss, mode="markers+lines",
+                    name="Mean Prediction", line=dict(dash="dash"),
+                    marker=dict(color="green", opacity=.7),
+                    ),
+         go.Scatter(x=a, y=up_func, fill=None,
+                    mode="lines", line=dict(color="lightgrey"),
+                    showlegend=False),
+         go.Scatter(x=a, y=down_func, fill='tonexty',
+                    mode="lines", line=dict(color="lightgrey"),
+                    showlegend=False),),
+          layout=go.Layout(title="mean loss as a function of p% and condifence"
+                                 " interval"
+                           , xaxis_title = "p% of train set"
+                           , yaxis_title = "mean loss"))
+    fig.show()
+
+
 if __name__ == '__main__':
+
     np.random.seed(0)
 
     # Question 1 - Load and preprocessing of housing prices dataset
@@ -100,40 +137,8 @@ if __name__ == '__main__':
     feature_evaluation(X, y_true, r"C:\Users\romyb\Documents\iml\IML.HUJI\exercises\house_price_predic_plot2")
 
     # Question 3 - Split samples into training- and testing sets.
-    print("x shape:")
-    print(X.shape)
     train_x, train_y, test_x, test_y = split_train_test(X,y_true)
 
-    # print("train x: ")
-    # print(train_x.shape)
-    # print("train y: ")
-    # print(train_y.shape)
-    #
-    # print("test x: ")
-    # print(test_x.shape)
-    # print("test y: ")
-    # print(test_y.shape)
-
-
-    # Question 4 - Fit model over increasing percentages of the overall training data
-    # For every percentage p in 10%, 11%, ..., 100%, repeat the following 10 times:
-    #   1) Sample p% of the overall training data
-    #   2) Fit linear model (including intercept) over sampled set
-    #   3) Test fitted model over test set
-    #   4) Store average and variance of loss over test set
-    # Then plot average loss as function of training size with error ribbon of size (mean-2*std, mean+2*std)
-
-    to_train = X
-    to_train.insert(0,'price', y_true)
-    for i in range(10,101):
-        for j in range(10):
-            temp_x = to_train.sample(n=i)
-            temp_y = temp_x['price']
-            del temp_x['price']
-            lini_temp = LinearRegression(False)
-            lini_temp._fit(temp_x, temp_y)
-
-
-
-
+    # Question 4
+    fit_test_model(train_x, train_y, test_x, test_y)
 

@@ -28,8 +28,9 @@ class Perceptron(BaseEstimator):
         `Perceptron.fit` function.
 
     callback_: Callable[[Perceptron, np.ndarray, int], None]
-            A callable to be called after each update of the model while fitting to given data
-            Callable function should receive as input a Perceptron instance, current sample and current response
+            A callable to be called after each update of the model while
+            fitting to given data Callable function should receive as input a
+            Perceptron instance, current sample and current response
     """
     def __init__(self,
                  include_intercept: bool = True,
@@ -73,7 +74,25 @@ class Perceptron(BaseEstimator):
         -----
         Fits model with or without an intercept depending on value of `self.fit_intercept_`
         """
-        raise NotImplementedError()
+        x = X
+        if self.include_intercept_:
+            #np.insert(x,0,"intercept",np.ones(X.shape[0]))
+            x = np.hstack((x, np.ones((X.shape[0], 1))))
+
+        self.coefs_ = np.zeros(x.shape[1])
+
+        for i in range(self.max_iter_):
+            s = x@self.coefs_*y
+            is_neg = np.any(s <= 0)
+            if not is_neg:
+                break
+            if i==0:
+                self.fitted_ = True
+            where_neg = np.where(s <= 0)
+            neg_index = where_neg[0][0]
+            self.coefs_ += y[neg_index]*x[neg_index]
+            self.callback_(self, x[neg_index], y[neg_index])
+
 
     def _predict(self, X: np.ndarray) -> np.ndarray:
         """
@@ -89,7 +108,12 @@ class Perceptron(BaseEstimator):
         responses : ndarray of shape (n_samples, )
             Predicted responses of given samples
         """
-        raise NotImplementedError()
+        x = X
+        if self.include_intercept_:
+            x = np.hstack((x, np.ones((X.shape[0], 1))))
+
+        # todo: check if x need transpose
+        return np.sign(x @ self.coefs_)
 
     def _loss(self, X: np.ndarray, y: np.ndarray) -> float:
         """
@@ -109,4 +133,9 @@ class Perceptron(BaseEstimator):
             Performance under missclassification loss function
         """
         from ...metrics import misclassification_error
-        raise NotImplementedError()
+        # x = X
+        # if self.include_intercept_:
+        #     x = np.hstack((x, np.ones((X.shape[0], 1))))
+
+        #c= misclassification_error(y, self._predict(X))
+        return misclassification_error(y, self._predict(X))
