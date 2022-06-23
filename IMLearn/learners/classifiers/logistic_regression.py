@@ -2,7 +2,8 @@ from typing import NoReturn
 import numpy as np
 from IMLearn import BaseEstimator
 from IMLearn.desent_methods import GradientDescent
-from IMLearn.desent_methods.modules import LogisticModule, RegularizedModule, L1, L2
+from IMLearn.desent_methods.modules import LogisticModule, RegularizedModule, \
+    L1, L2
 
 
 class LogisticRegression(BaseEstimator):
@@ -12,14 +13,16 @@ class LogisticRegression(BaseEstimator):
     Attributes
     ----------
     solver_: GradientDescent, default=GradientDescent()
-        Descent method solver to use for the logistic regression objective optimization
+        Descent method solver to use for the logistic regression objective
+        optimization
 
     penalty_: str, default="none"
-        Type of regularization term to add to logistic regression objective. Supported values
-        are "none", "l1", "l2"
+        Type of regularization term to add to logistic regression objective.
+        Supported values are "none", "l1", "l2"
 
     lam_: float, default=1
-        Regularization parameter to be used in case `self.penalty_` is not "none"
+        Regularization parameter to be used in case `self.penalty_` is not
+        "none"
 
     alpha_: float, default=0.5
         Threshold value by which to convert class probability to class value
@@ -85,10 +88,27 @@ class LogisticRegression(BaseEstimator):
 
         Notes
         -----
-        Fits model using specified `self.optimizer_` passed when instantiating class and includes an intercept
+        Fits model using specified `self.optimizer_` passed when instantiating
+        class and includes an intercept
         if specified by `self.include_intercept_
         """
-        raise NotImplementedError()
+        x = X
+        if self.include_intercept_:
+            x = np.insert(X, 0, 1, axis=1)
+
+        w_reg = np.random.normal(0,1,x.shape[1])/np.sqrt(x.shape[1])
+
+        if self.penalty_ == "none":
+            self.coefs_ = self.solver_.fit(LogisticModule(w_reg),x,y)
+        else:
+            reg_norm = L1() if self.penalty_ == "l1" else L2()
+            l_reg = LogisticModule(weights=w_reg)
+            reg_model = RegularizedModule(fidelity_module= l_reg,
+                                          regularization_module=reg_norm,
+                                          lam=self.lam_,
+                                          weights=w_reg,
+                                          include_intercept=self.include_intercept_)
+            self.coefs_ = self.solver_.fit(reg_model, x, y)
 
     def _predict(self, X: np.ndarray) -> np.ndarray:
         """
@@ -104,11 +124,12 @@ class LogisticRegression(BaseEstimator):
         responses : ndarray of shape (n_samples, )
             Predicted responses of given samples
         """
-        raise NotImplementedError()
+        return np.where(self.predict_proba(X) >= self.alpha_, 1, 0)
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
         """
-        Predict probabilities of samples being classified as `1` according to sigmoid(Xw)
+        Predict probabilities of samples being classified as `1` according to
+        sigmoid(Xw)
 
         Parameters
         ----------
@@ -118,9 +139,15 @@ class LogisticRegression(BaseEstimator):
         Returns
         -------
         probabilities: ndarray of shape (n_samples,)
-            Probability of each sample being classified as `1` according to the fitted model
+            Probability of each sample being classified as `1` according to the
+            fitted model
         """
-        raise NotImplementedError()
+        x = X
+        if self.include_intercept_:
+            x = np.hstack((np.ones((X.shape[0],1)),X))
+
+        z = np.dot(x,self.coefs_)
+        return (np.exp(z))/(1+np.exp(z))
 
     def _loss(self, X: np.ndarray, y: np.ndarray) -> float:
         """
@@ -139,4 +166,5 @@ class LogisticRegression(BaseEstimator):
         loss : float
             Performance under misclassification error
         """
-        raise NotImplementedError()
+        from ...metrics import misclassification_error
+        return misclassification_error(y,self.predict(X))

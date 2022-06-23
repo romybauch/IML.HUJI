@@ -33,7 +33,7 @@ class L2(BaseModule):
         output: ndarray of shape (1,)
             Value of function at point self.weights
         """
-        raise NotImplementedError()
+        return np.linalg.norm(self.weights)**2
 
     def compute_jacobian(self, **kwargs) -> np.ndarray:
         """
@@ -49,7 +49,7 @@ class L2(BaseModule):
         output: ndarray of shape (n_in,)
             L2 derivative with respect to self.weights at point self.weights
         """
-        raise NotImplementedError()
+        return 2*self.weights
 
 
 class L1(BaseModule):
@@ -78,7 +78,7 @@ class L1(BaseModule):
         output: ndarray of shape (1,)
             Value of function at point self.weights
         """
-        raise NotImplementedError()
+        return np.linalg.norm(self.weights, ord=1)
 
     def compute_jacobian(self, **kwargs) -> np.ndarray:
         """
@@ -94,7 +94,7 @@ class L1(BaseModule):
         output: ndarray of shape (n_in,)
             L1 derivative with respect to self.weights at point self.weights
         """
-        raise NotImplementedError()
+        return np.sign(self.weights)
 
 
 class LogisticModule(BaseModule):
@@ -116,7 +116,8 @@ class LogisticModule(BaseModule):
 
     def compute_output(self, X: np.ndarray, y: np.ndarray, **kwargs) -> np.ndarray:
         """
-        Compute the output value of the logistic regression objective function at point self.weights
+        Compute the output value of the logistic regression objective
+        function at point self.weights
 
         Parameters
         ----------
@@ -131,11 +132,16 @@ class LogisticModule(BaseModule):
         output: ndarray of shape (1,)
             Value of function at point self.weights
         """
-        raise NotImplementedError()
+        k = -1/X.shape[0]
+        sum1 = (y * (X @ self.weights))
+        sum2 = np.log(1+np.exp(X@self.weights))
+        return k*np.sum(sum1-sum2)
 
-    def compute_jacobian(self, X: np.ndarray, y: np.ndarray, **kwargs) -> np.ndarray:
+    def compute_jacobian(self, X: np.ndarray, y: np.ndarray, **kwargs) -> \
+            np.ndarray:
         """
-        Compute the gradient of the logistic regression objective function at point self.weights
+        Compute the gradient of the logistic regression objective function at
+        point self.weights
 
         Parameters
         ----------
@@ -150,15 +156,33 @@ class LogisticModule(BaseModule):
         output: ndarray of shape (n_features,)
             Derivative of function with respect to self.weights at point self.weights
         """
-        raise NotImplementedError()
+        # m = X.shape[0]
+        # d = X.shape[1]
+        #
+        # jacobi = np.empty(d)
+        #
+        # for i in range(d):
+        #     part1 = y * X[:, i] - X[:, i] * np.exp(-X @ self.weights)
+        #     part2 = 1 / (1 + np.exp(-X @ self.weights))
+        #     jacobi[i] = -(1 / m) * np.sum(part1*part2)
+        #
+        # return jacobi
+        samples_num = X.shape[0]
+        features_num = X.shape[1]
+        f_1 = y @ X
+        exp_xw = np.exp(X @ self.weights)
+        f_2 = np.zeros(features_num)
+        for i in range(samples_num):
+            f_2 += (X[i] * exp_xw[i]) / (1 + exp_xw[i])
+        return (-1 / samples_num) * (f_1 - f_2)
 
 
 class RegularizedModule(BaseModule):
     """
     Class representing a general regularized objective function of the format:
                                     f(w) = F(w) + lambda*R(w)
-    for F(w) being some fidelity function, R(w) some regularization function and lambda
-    the regularization parameter
+    for F(w) being some fidelity function, R(w) some regularization function
+    and lambda the regularization parameter
     """
     def __init__(self,
                  fidelity_module: BaseModule,
@@ -187,7 +211,8 @@ class RegularizedModule(BaseModule):
             Should fidelity term (and not regularization term) include an intercept or not
         """
         super().__init__()
-        self.fidelity_module_, self.regularization_module_, self.lam_ = fidelity_module, regularization_module, lam
+        self.fidelity_module_, self.regularization_module_, self.lam_ = \
+            fidelity_module, regularization_module, lam
         self.include_intercept_ = include_intercept
 
         if weights is not None:
@@ -195,7 +220,8 @@ class RegularizedModule(BaseModule):
 
     def compute_output(self, **kwargs) -> np.ndarray:
         """
-        Compute the output value of the regularized objective function at point self.weights
+        Compute the output value of the regularized objective function at
+        point self.weights
 
         Parameters
         ----------
@@ -207,7 +233,8 @@ class RegularizedModule(BaseModule):
         output: ndarray of shape (1,)
             Value of function at point self.weights
         """
-        raise NotImplementedError()
+        return self.fidelity_module_.compute_output(**kwargs) + \
+               self.lam_ * self.regularization_module_.compute_output(**kwargs)
 
     def compute_jacobian(self, **kwargs) -> np.ndarray:
         """
@@ -223,7 +250,13 @@ class RegularizedModule(BaseModule):
         output: ndarray of shape (n_in,)
             Derivative with respect to self.weights at point self.weights
         """
-        raise NotImplementedError()
+        func_jacob = self.fidelity_module_.compute_jacobian(**kwargs)
+        regu_jacob = self.regularization_module_.compute_jacobian(**kwargs)
+
+        if self.include_intercept_:
+            regu_jacob = np.insert(regu_jacob, 0, 0, axis=0)
+
+        return self.lam_*regu_jacob + func_jacob
 
     @property
     def weights(self):
@@ -234,19 +267,23 @@ class RegularizedModule(BaseModule):
         -------
         weights: ndarray of shape (n_in, n_out)
         """
-        raise NotImplementedError()
+        return self.fidelity_module_.weights
 
     @weights.setter
     def weights(self, weights: np.ndarray) -> None:
         """
         Setter function for module parameters
 
-        In case self.include_intercept_ is set to True, weights[0] is regarded as the intercept
-        and is not passed to the regularization module
+        In case self.include_intercept_ is set to True, weights[0] is regarded
+        as the intercept and is not passed to the regularization module
 
         Parameters
         ----------
         weights: ndarray of shape (n_in, n_out)
             Weights to set for module
         """
-        raise NotImplementedError()
+        self.fidelity_module_.weights_ = weights
+        if self.include_intercept_:
+            self.regularization_module_.weights_ = np.delete(weights, 0, axis=0)
+        else:
+            self.regularization_module_.weights_ = weights
