@@ -87,14 +87,58 @@ if __name__ == '__main__':
     train_X, train_y, test_X, test_y = load_mnist()
     (n_samples, n_features), n_classes = train_X.shape, 10
 
-    # ---------------------------------------------------------------------------------------------#
-    # Question 5+6+7: Network with ReLU activations using SGD + recording convergence              #
-    # ---------------------------------------------------------------------------------------------#
+    # ------------------------------------------------------------------------#
+    # Question 5+6+7: Network with ReLU activations using SGD +
+    # recording convergence              #
+    # ------------------------------------------------------------------------#
     # Initialize, fit and test network
-    raise NotImplementedError()
+    nn_q5 = NeuralNetwork(
+        modules=[
+            FullyConnectedLayer(
+                input_dim=n_features, output_dim=64, activation=ReLU()),
+            FullyConnectedLayer(
+                input_dim=64, output_dim=64, activation=ReLU()),
+            FullyConnectedLayer(
+                input_dim=64, output_dim=n_classes, activation=None)],
+        loss_fn=CrossEntropyLoss(),
+        solver=GradientDescent(learning_rate=FixedLR(base_lr=0.1),
+                               max_iter=5000)
+    )
+    nn_q5.fit(train_X, train_y)
+
+    acc_q1 = accuracy(y_true=test_y, y_pred=nn_q5.predict(test_X))
+    print("question5 network's accuracy is: " + str(acc_q1))
 
     # Plotting convergence process
-    raise NotImplementedError()
+    loss, grad_norm = [], []
+
+    def call_back(**kwargs):
+        loss.append(kwargs["val"])
+        grad_norm.append(kwargs["delta"])
+        return
+
+    plot_conv = go.Figure([go.Scatter(y=loss,
+                                      x=np.arange(len(loss)),
+                                      mode='markers'), ],
+                                      layout=go.Layout(
+                                      title=r"loss as a function of iteration "
+                                            r"(q6)",
+                                      yaxis_title="convergence value",
+                                      xaxis_title="iteration number"))
+    plot_conv.show()
+
+    plot_grad_norm = go.Figure([go.Scatter(y=grad_norm,
+                                      x=np.arange(len(grad_norm)),
+                                      mode='markers'), ],
+                                      layout=go.Layout(
+                                      title=r"gradient norm as a function of "
+                                            r"iteration (q6)",
+                                      yaxis_title="gradient norm",
+                                      xaxis_title="iteration number"))
+    plot_grad_norm.show()
+
+
+
 
     # Plotting test true- vs predicted confusion matrix
     raise NotImplementedError()

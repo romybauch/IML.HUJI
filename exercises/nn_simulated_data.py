@@ -21,7 +21,8 @@ def generate_nonlinear_data(
         train_proportion: float = 0.8) -> \
         Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Create a multiclass non linearly-separable dataset. Adopted from Stanford CS231 course code.
+    Create a multiclass non linearly-separable dataset. Adopted from Stanford
+    CS231 course code.
 
     Parameters:
     -----------
@@ -98,26 +99,90 @@ if __name__ == '__main__':
     # Generate and visualize dataset
     n_features, n_classes = 2, 3
     train_X, train_y, test_X, test_y = generate_nonlinear_data(
-        samples_per_class=500, n_features=n_features, n_classes=n_classes, train_proportion=0.8)
-    lims = np.array([np.r_[train_X, test_X].min(axis=0), np.r_[train_X, test_X].max(axis=0)]).T + np.array([-.1, .1])
+        samples_per_class=500, n_features=n_features, n_classes=n_classes,
+        train_proportion=0.8)
+    lims = np.array([np.r_[train_X, test_X].min(axis=0),
+                     np.r_[train_X, test_X].max(axis=0)]).T + np.array([-.1, .1])
 
     go.Figure(data=[go.Scatter(x=train_X[:, 0], y=train_X[:, 1], mode='markers',
-                               marker=dict(color=train_y, colorscale=custom, line=dict(color="black", width=1)))],
-              layout=go.Layout(title=r"$\text{Train Data}$", xaxis=dict(title=r"$x_1$"), yaxis=dict(title=r"$x_2$"),
+                               marker=dict(color=train_y, colorscale=custom,
+                                           line=dict(color="black", width=1)))],
+              layout=go.Layout(title=r"$\text{Train Data}$",
+                               xaxis=dict(title=r"$x_1$"),
+                               yaxis=dict(title=r"$x_2$"),
                                width=400, height=400))\
         .write_image(f"../figures/nonlinear_data.png")
 
-    # ---------------------------------------------------------------------------------------------#
-    # Question 1: Fitting simple network with two hidden layers                                    #
-    # ---------------------------------------------------------------------------------------------#
-    raise NotImplementedError()
+    # -----------------------------------------------------------------------#
+    # Question 1: Fitting simple network with two hidden layers              #
+    # -----------------------------------------------------------------------#
+    nn_q1 = NeuralNetwork(
+        modules=[
+            FullyConnectedLayer(
+                input_dim=n_features, output_dim=16, activation=ReLU()),
+            FullyConnectedLayer(
+                input_dim=16, output_dim=16, activation=ReLU()),
+            FullyConnectedLayer(
+                input_dim=16, output_dim=n_classes, activation=None)],
+        loss_fn = CrossEntropyLoss(),
+        solver = GradientDescent(learning_rate=FixedLR(base_lr=0.1),
+                                 max_iter=5000)
+    )
+    nn_q1.fit(train_X, train_y)
+    plot_decision_boundary(nn_q1, lims)
 
-    # ---------------------------------------------------------------------------------------------#
-    # Question 2: Fitting a network with no hidden layers                                          #
-    # ---------------------------------------------------------------------------------------------#
-    raise NotImplementedError()
+    acc_q1 = accuracy(y_true=test_y, y_pred=nn_q1.predict(test_X))
+    print("question1 network's accuracy is: " + str(acc_q1))
 
-    # ---------------------------------------------------------------------------------------------#
-    # Question 3+4: Plotting network convergence process                                           #
-    # ---------------------------------------------------------------------------------------------#
-    raise NotImplementedError()
+    # -----------------------------------------------------------------------#
+    # Question 2: Fitting a network with no hidden layers                    #
+    # -----------------------------------------------------------------------#
+    nn_q2 = NeuralNetwork(
+        modules=[
+            FullyConnectedLayer(input_dim=2, output_dim=3, activation=None)],
+        loss_fn=CrossEntropyLoss(),
+        solver=GradientDescent(learning_rate=FixedLR(base_lr=0.1),
+                               max_iter=5000)
+    )
+    nn_q2.fit(train_X, train_y)
+    plot_decision_boundary(nn_q2, lims)
+
+    acc_q2 = accuracy(y_true=test_y, y_pred=nn_q2.predict(test_X))
+    print("question2 network's accuracy is: " + str(acc_q2))
+
+    # -----------------------------------------------------------------------#
+    # Question 3+4: Plotting network convergence process                     #
+    # -----------------------------------------------------------------------#
+
+    loss, weights = [], []
+
+    def call_back(**kwargs):
+        loss.append(kwargs["val"])
+        if kwargs["t"]%100 == 0:
+            weights.append(kwargs["weights"])
+        return
+
+    nn_q1.solver_.callback = call_back()
+    nn_q1.fit(train_X, train_y)
+
+    # q3
+    plot_convergence1 = go.Figure([go.Scatter(y=loss,
+                                              x=np.arange(len(loss)),
+                                              mode='markers'), ],
+                                  layout=go.Layout(
+                                      title=r"convergence rate ",
+                                      yaxis_title="convergence value",
+                                      xaxis_title="iteration number"))
+    plot_convergence1.show()
+
+    # animate decision boundary function
+    animate_decision_boundary(nn_q1, weights, lims, train_X, train_y)
+
+    #q4
+    nn_q1.modules_ = [
+            FullyConnectedLayer(
+                input_dim=n_features, output_dim=6, activation=ReLU()),
+            FullyConnectedLayer(
+                input_dim=6, output_dim=6, activation=ReLU()),
+            FullyConnectedLayer(
+                input_dim=6, output_dim=n_classes, activation=None)]

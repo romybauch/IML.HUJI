@@ -28,7 +28,11 @@ class NeuralNetwork(BaseEstimator, BaseModule):
                  loss_fn: BaseModule,
                  solver: Union[StochasticGradientDescent, GradientDescent]):
         super().__init__()
-        raise NotImplementedError()
+        self.modules_ = modules
+        self.loss_fn_ = loss_fn
+        self.solver_ = solver
+        self.pre_activation_ = []
+        self.post_activation_ = []
 
     # region BaseEstimator implementations
     def _fit(self, X: np.ndarray, y: np.ndarray) -> NoReturn:
@@ -84,7 +88,8 @@ class NeuralNetwork(BaseEstimator, BaseModule):
     # region BaseModule implementations
     def compute_output(self, X: np.ndarray, y: np.ndarray, **kwargs) -> np.ndarray:
         """
-        Compute network output with respect to modules' weights given input samples
+        Compute network output with respect to modules' weights given input
+        samples
 
         Parameters
         ----------
@@ -97,18 +102,34 @@ class NeuralNetwork(BaseEstimator, BaseModule):
         Returns
         -------
         output: ndarray of shape (1,)
-            Network's output value including pass through the specified loss function
+            Network's output value including pass through the specified loss
+            function
 
         Notes
         -----
-        Function stores all intermediate values in the `self.pre_activations_` and `self.post_activations_` arrays
+        Function stores all intermediate values in the `self.pre_activations_`
+        and `self.post_activations_` arrays
         """
-        raise NotImplementedError()
+        # forward pass
+        post_oi = X
+        self.post_activation_.append(X)
+
+        for modul in self.modules_:
+            pre_i = post_oi @ modul.weights
+            self.pre_activation_.append(pre_i)
+            post_oi = modul.compute_output(post_oi)
+            self.post_activation_.append(post_oi)
+
+        # loss function
+        loss = self.loss_fn_.compute_output(x=self.post_activation_[-1] - y)
+        self.post_activation_.append(loss)
+
+        return np.mean(loss)
 
     def compute_prediction(self, X: np.ndarray):
         """
-        Compute network output (forward pass) with respect to modules' weights given input samples, except pass
-        through specified loss function
+        Compute network output (forward pass) with respect to modules' weights
+        given input samples, except pass through specified loss function
 
         Parameters
         ----------
@@ -120,11 +141,16 @@ class NeuralNetwork(BaseEstimator, BaseModule):
         output : ndarray of shape (n_samples, n_classes)
             Network's output values prior to the call of the loss function
         """
-        raise NotImplementedError()
+        cur_x = X
+        for cur_modul in self.modules_:
+            cur_x = cur_modul.compute_output(cur_x)
+        return cur_x
 
-    def compute_jacobian(self, X: np.ndarray, y: np.ndarray, **kwargs) -> np.ndarray:
+    def compute_jacobian(self, X: np.ndarray, y: np.ndarray, **kwargs) \
+            -> np.ndarray:
         """
-        Compute network's derivative (backward pass) according to the backpropagation algorithm.
+        Compute network's derivative (backward pass) according to the
+        backpropagation algorithm.
 
         Parameters
         ----------
@@ -143,7 +169,33 @@ class NeuralNetwork(BaseEstimator, BaseModule):
         Function depends on values calculated in forward pass and stored in
         `self.pre_activations_` and `self.post_activations_`
         """
-        raise NotImplementedError()
+        # backward pass
+
+        derivation_chain = []
+        partial_derv = []
+
+        delta = self.post_activation_[-1] - y
+        derivation_chain.append(delta)
+        partial_derv.append(np.dot(delta, self.post_activation_[-2].transpose()))
+        #Here, l = 1 means the last layer of neurons, l = 2 is the
+        # second-last layer, and so on.
+        for i,modul in enumerate(self.modules_):
+            z = self.pre_activation_[-i] #zs[-l]
+            sp = self.modules_[-i].compute_jacobian(z) #sigmoid_prime(z)
+            delta = np.dot(self.modules_[-i+1].weights_.transpose(), delta)*sp
+            # delta = np.dot(self.weights[-i+1].transpose(), delta) * sp
+            derivation_chain.append(delta)
+            # nabla_b[-l] = delta
+            partial_derv.append(np.dot(delta, self.post_activation_[-i-1].transpose()))
+            # nabla_w[-l] = np.dot(delta, activations[-l-1].transpose())
+
+        derivation_chain.reverse()
+        partial_derv.reverse()
+
+        return self._flatten_parameters(partial_derv)
+
+
+
 
     @property
     def weights(self) -> np.ndarray:
